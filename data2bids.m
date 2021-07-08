@@ -251,6 +251,7 @@ cfg.bidsroot  = ft_getopt(cfg, 'bidsroot');
 cfg.sub       = ft_getopt(cfg, 'sub');
 cfg.ses       = ft_getopt(cfg, 'ses');
 cfg.task      = ft_getopt(cfg, 'task');
+cfg.tracksys  = ft_getopt(cfg, 'tracksys');
 cfg.acq       = ft_getopt(cfg, 'acq');
 cfg.ce        = ft_getopt(cfg, 'ce');
 cfg.rec       = ft_getopt(cfg, 'rec');
@@ -558,7 +559,7 @@ cfg.motion.SoftwareVersions               = ft_getopt(cfg.motion, 'SoftwareVersi
 cfg.motion.SpaceGeometry                  = ft_getopt(cfg.motion, 'SpaceGeometry'           );
 cfg.motion.StartTime                      = ft_getopt(cfg.motion, 'StartTime'               );
 cfg.motion.SubjectArtefactDescription     = ft_getopt(cfg.motion, 'SubjectArtefactDescription'  );
-
+cfg.motion.tracksysAll                    = ft_getopt(cfg, 'tracksysAll'); 
 %% information for the coordsystem.json file for MEG, EEG, iEEG, and motion
 cfg.coordsystem.MEGCoordinateSystem                             = ft_getopt(cfg.coordsystem, 'MEGCoordinateSystem'                            ); % REQUIRED. Defines the coordinate system for the MEG sensors. See Appendix VIII: preferred names of Coordinate systems. If "Other", provide definition of the coordinate system in [MEGCoordinateSystemDescription].
 cfg.coordsystem.MEGCoordinateUnits                              = ft_getopt(cfg.coordsystem, 'MEGCoordinateUnits'                             ); % REQUIRED. Units of the coordinates of MEGCoordinateSystem. MUST be ???m???, ???cm???, or ???mm???.
@@ -616,6 +617,8 @@ cfg.channels.detector           = ft_getopt(cfg.channels, 'detector'           ,
 cfg.channels.wavelength         = ft_getopt(cfg.channels, 'wavelength'         , nan);  % REQUIRED. Wavelength of light in nm. n/a for channels that do not contain raw NIRS signals (acceleration).
 % FIXME optional nirs channel fields (e.g. frequencies for frequency domain NIRS) should still be added here
 
+% specific options for motion channels
+cfg.channels.tracked_point         = ft_getopt(cfg.channels, 'tracked_point'  , nan); 
 %% columns in the electrodes.tsv
 cfg.electrodes.name             = ft_getopt(cfg.electrodes, 'name'             , nan);  % REQUIRED. Name of the electrode
 cfg.electrodes.x                = ft_getopt(cfg.electrodes, 'x'                , nan);  % REQUIRED. Recorded position along the x-axis
@@ -673,7 +676,8 @@ if isempty(cfg.outputfile)
     filename = ['sub-' cfg.sub];
     filename = add_entity(filename, 'ses',  cfg.ses);
     filename = add_entity(filename, 'task', cfg.task);
-    filename = add_entity(filename, 'acq',  cfg.acq);
+    filename = add_entity(filename, 'tracksys', cfg.tracksys); 
+    filename = add_entity(filename, 'acq',  cfg.acq); 
     filename = add_entity(filename, 'ce',   cfg.ce);
     filename = add_entity(filename, 'rec',  cfg.rec);
     filename = add_entity(filename, 'dir',  cfg.dir);
@@ -1334,16 +1338,36 @@ end
 
 %% need_motion_json
 if need_motion_json
-  
+
   motion_json.SamplingFrequency     = hdr.Fs;
   motion_json.StartTime             = nan;
   motion_json.MotionChannelCount    = hdr.nChans;
   motion_json.RecordingDuration     = (hdr.nSamples*hdr.nTrials)/hdr.Fs;
   
+  motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount      = numel(unique(cfg.channels.tracked_point));
+  % to do: adjust according to tracked points
+  motion_json.TrackingSystem.(cfg.tracksys).POSChannelCount       = sum(strcmpi(hdr.chantype, 'POS'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).ORNTChannelCount       = sum(strcmpi(hdr.chantype, 'ORNT'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).VELChannelCount       = sum(strcmpi(hdr.chantype, 'VEL'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).ANGVELChannelCount       = sum(strcmpi(hdr.chantype, 'ANGVEL'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).ACCChannelCount       = sum(strcmpi(hdr.chantype, 'ACC'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).ANGACCChannelCount       = sum(strcmpi(hdr.chantype, 'ANGACC'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).MAGNChannelCount       = sum(strcmpi(hdr.chantype, 'MAGN'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystem.(cfg.tracksys).JNTANGChannelCount       = sum(strcmpi(hdr.chantype, 'JNTAN'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  
+  
   % merge the information specified by the user with that from the data
   % in case fields appear in both, the first input overrules the second
   motion_json = mergeconfig(motion_settings,  motion_json, false);
   motion_json = mergeconfig(generic_settings, motion_json, false);
+
+  % remove general TrackingSystem info where not applicable
+  if cfg.tracksys == cfg.motion.tracksysAll{1}
+    motion_json.TrackingSystem = rmfield(motion_json.TrackingSystem,cfg.motion.tracksysAll{2}) % removes Trackingsystem info of 2nd system
+  else 
+    motion_json.TrackingSystem  = rmfield(motion_json.TrackingSystem,cfg.motion.tracksysAll{1}) 
+  end
+
 end
 
 %% need_channels_tsv
@@ -1785,23 +1809,52 @@ for i=1:numel(modality)
     modality_json = eval(sprintf('%s_json', modality{i}));
     modality_json = remove_empty(modality_json);
     
-    if strcmp(modality{i}, 'coordsystem')
-      [p, f] = fileparts(cfg.outputfile);
-      f = remove_entity(f, 'task');     % remove _task-something
-      f = remove_entity(f, 'acq');      % remove _acq-something
-      f = remove_entity(f, 'ce');       % remove _ce-something
-      f = remove_entity(f, 'rec');      % remove _rec-something
-      f = remove_entity(f, 'dir');      % remove _dir-something
-      f = remove_entity(f, 'run');      % remove _run-something
-      f = remove_entity(f, 'mod');      % remove _mod-something
-      f = remove_entity(f, 'echo');     % remove _echo-something
-      f = remove_entity(f, 'proc');     % remove _proc-something
-      f = remove_datatype(f);           % remove _meg, _eeg, etc.
-      filename = fullfile(p, [f '_coordsystem.json']);
-    else
-      % just replace the extension with json
-      filename = corresponding_json(cfg.outputfile);
+%     if strcmp(modality{i}, 'coordsystem')
+%       [p, f] = fileparts(cfg.outputfile);
+%       f = remove_entity(f, 'task');     % remove _task-something
+%       f = remove_entity(f, 'acq');      % remove _acq-something
+%       f = remove_entity(f, 'tracksys');      % remove _tracksys-something
+%       f = remove_entity(f, 'ce');       % remove _ce-something
+%       f = remove_entity(f, 'rec');      % remove _rec-something
+%       f = remove_entity(f, 'dir');      % remove _dir-something
+%       f = remove_entity(f, 'run');      % remove _run-something
+%       f = remove_entity(f, 'mod');      % remove _mod-something
+%       f = remove_entity(f, 'echo');     % remove _echo-something
+%       f = remove_entity(f, 'proc');     % remove _proc-something
+%       f = remove_datatype(f);           % remove _meg, _eeg, etc.
+%       filename = fullfile(p, [f '_coordsystem.json']);
+%     else
+%       % just replace the extension with json
+%       filename = corresponding_json(cfg.outputfile);
+%     end
+    
+    switch modality{i}
+        case 'coordsystem'
+            [p, f] = fileparts(cfg.outputfile);
+            f = remove_entity(f, 'task');     % remove _task-something
+            f = remove_entity(f, 'acq');      % remove _acq-something
+            f = remove_entity(f, 'tracksys');      % remove _tracksys-something
+            f = remove_entity(f, 'ce');       % remove _ce-something
+            f = remove_entity(f, 'rec');      % remove _rec-something
+            f = remove_entity(f, 'dir');      % remove _dir-something
+            f = remove_entity(f, 'run');      % remove _run-something
+            f = remove_entity(f, 'mod');      % remove _mod-something
+            f = remove_entity(f, 'echo');     % remove _echo-something
+            f = remove_entity(f, 'proc');     % remove _proc-something
+            f = remove_datatype(f);           % remove _meg, _eeg, etc.
+            filename = fullfile(p, [f '_coordsystem.json']);
+      
+        case 'motion'
+            [p, f] = fileparts(cfg.outputfile);
+            f = remove_entity(f, 'tracksys');      % remove _tracksys-something
+            f = remove_datatype(f);           % remove _meg, _eeg, etc.
+            filename = fullfile(p, [f '_motion.json']);
+            
+        otherwise
+            % just replace the extension with json
+            filename = corresponding_json(cfg.outputfile);
     end
+    
     
     if isfile(filename)
       existing = ft_read_json(filename);
@@ -1845,6 +1898,7 @@ for i=1:numel(modality)
       [p, f] = fileparts(cfg.outputfile);
       f = remove_entity(f, 'task');     % remove _task-something
       f = remove_entity(f, 'acq');      % remove _acq-something
+      f = remove_entity(f, 'tracksys');      % remove _tracksys-something
       f = remove_entity(f, 'ce');       % remove _ce-something
       f = remove_entity(f, 'rec');      % remove _rec-something
       f = remove_entity(f, 'dir');      % remove _dir-something
@@ -1852,6 +1906,18 @@ for i=1:numel(modality)
       f = remove_entity(f, 'mod');      % remove _mod-something
       f = remove_entity(f, 'echo');     % remove _echo-something
       f = remove_entity(f, 'proc');     % remove _proc-something
+      f = remove_datatype(f);           % remove _meg, _eeg, etc.
+      filename = fullfile(p, sprintf('%s_%s.tsv', f, modality{i}));
+    else
+      [p, f] = fileparts(cfg.outputfile);
+      f = remove_datatype(f); % remove _bold, _meg, etc.
+      filename = fullfile(p, sprintf('%s_%s.tsv', f, modality{i}));
+    end
+    
+    % remove tracksys from channels.tsv
+    if any(strcmp(modality{i}, 'channels'))
+      [p, f] = fileparts(cfg.outputfile);
+      f = remove_entity(f, 'tracksys');      % remove _tracksys-something
       f = remove_datatype(f);           % remove _meg, _eeg, etc.
       filename = fullfile(p, sprintf('%s_%s.tsv', f, modality{i}));
     else
@@ -2309,7 +2375,7 @@ switch typ
     dir = 'dwi';
   case {'phasediff' 'phase1' 'phase2' 'magnitude1' 'magnitude2' 'magnitude' 'fieldmap' 'epi'}
     dir = 'fmap';
-  case {'events' 'stim' 'physio' 'emg' 'exg' 'eyetracker' 'motion' 'audio' 'video'} % these could also all be stored in 'func' or one of the other directories with brain data
+  case {'events' 'stim' 'physio' 'emg' 'exg' 'eyetracker' 'audio' 'video'} % these could also all be stored in 'func' or one of the other directories with brain data
     dir = 'beh';
   case {'meg'} % this could also include 'events' or other non-brain data
     dir = 'meg';
