@@ -95,7 +95,7 @@ elseif nargin==3
     t3 = t2;
     return
   elseif m1>0 && m2==0
-    t3 = t2;
+    t3 = t2; %shouldn't be t1?
     return
   end
   
@@ -119,7 +119,6 @@ elseif nargin==3
   
   % deal with the columns that are present in both inputs
   col = intersect(c1, c2);
-  
   for i=1:numel(col)
     % copy the existing column from t1 into t3
     t3.(col{i}) = t1.(col{i});

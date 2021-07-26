@@ -43,6 +43,9 @@ writetable(tsv, filename, 'Delimiter', 'tab', 'FileType', 'text');
 % SUBFUNCTION this is shared with DATA2BIDS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function val = output_compatible(val)
+if isdatetime(val)
+    val = cellstr(val);
+end 
 if istable(val)
   fn = val.Properties.VariableNames;
   for i=1:numel(fn)

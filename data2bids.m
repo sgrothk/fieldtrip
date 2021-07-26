@@ -554,7 +554,7 @@ cfg.motion.ManufacturersModelName         = ft_getopt(cfg.motion, 'Manufacturers
 cfg.motion.MotionChannelCount             = ft_getopt(cfg.motion, 'MotionChannelCount'      );
 cfg.motion.RecordingDuration              = ft_getopt(cfg.motion, 'RecordingDuration'       );
 cfg.motion.RecordingType                  = ft_getopt(cfg.motion, 'RecordingType'           );
-cfg.motion.SamplingFrequency              = ft_getopt(cfg.motion, 'SamplingFrequency'       );
+% cfg.motion.SamplingFrequency              = ft_getopt(cfg.motion, 'SamplingFrequency'       );
 cfg.motion.SoftwareVersions               = ft_getopt(cfg.motion, 'SoftwareVersions'        );
 cfg.motion.SpaceGeometry                  = ft_getopt(cfg.motion, 'SpaceGeometry'           );
 cfg.motion.SubjectArtefactDescription     = ft_getopt(cfg.motion, 'SubjectArtefactDescription'  );
@@ -772,6 +772,7 @@ need_stim_json          = false;
 need_eyetracker_json    = false;
 need_motion_json        = false;
 need_coordsystem_json   = false;
+need_scans_json         = false;
 % determine the tsv files that are required
 need_events_tsv         = false; % for functional and behavioral experiments
 need_channels_tsv       = false; % only needed for MEG/EEG/iEEG/EMG/NIRS
@@ -1014,6 +1015,7 @@ end
 need_events_tsv       = need_events_tsv       || need_meg_json || need_eeg_json || need_ieeg_json || need_emg_json || need_exg_json || need_nirs_json || need_eyetracker_json || need_motion_json || (contains(cfg.outputfile, 'task') || ~isempty(cfg.TaskName) || ~isempty(cfg.task)) || ~isempty(cfg.events);
 need_channels_tsv     = need_channels_tsv     || need_meg_json || need_eeg_json || need_ieeg_json || need_emg_json || need_exg_json || need_nirs_json || need_motion_json ;
 need_coordsystem_json = need_coordsystem_json || need_meg_json || need_electrodes_tsv || need_nirs_json || need_motion_json ;
+need_scans_json       = need_motion_json ;
 
 if need_emg_json
   ft_warning('EMG data is not yet part of the official BIDS specification');
@@ -1121,6 +1123,11 @@ motion_settings = keepfields(cfg.motion, fn);
 fn = fieldnames(cfg.coordsystem);
 fn = fn(~cellfun(@isempty, regexp(fn, '^[A-Z].*|^iEEG')));
 coordsystem_settings = keepfields(cfg.coordsystem, fn);
+
+% make the relevant selection, all json fields start with a capital letter
+fn = fieldnames(cfg.scans);
+fn = fn(~cellfun(@isempty, regexp(fn, '^[A-Z]..*')));
+scans_settings = keepfields(cfg.scans, fn);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% construct the content for the json and tsv files
@@ -1337,36 +1344,36 @@ end
 %% need_motion_json
 if need_motion_json
 
-
-  motion_json.MotionChannelCount                                           = hdr.nChans;
-  motion_json.RecordingDuration                                            = (hdr.nSamples*hdr.nTrials)/hdr.Fs;
-  motion_json.TrackedPointsCountTotal                                      = numel(unique(cfg.channels.tracked_point));
+  motion_json.MotionChannelCount                                            = hdr.nChans;
+  motion_json.RecordingDuration                                             = (hdr.nSamples*hdr.nTrials)/hdr.Fs;
+  motion_json.TrackedPointsCountTotal                                       = numel(unique(cfg.channels.tracked_point));
   
-  motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount             = numel(unique(cfg.channels.tracked_point)); % has to be adjusted for multiple system use
-  motion_json.TrackingSystem.(cfg.tracksys).SamplingFrequency              = hdr.Fs;
-  motion_json.TrackingSystem.(cfg.tracksys).StartTime                      = ft_getopt(cfg.motion, 'start_time'      );
-  motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount             = numel(unique(cfg.channels.tracked_point));
+  motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount             = numel(unique(cfg.channels.tracked_point)); % has to be adjusted for multiple system use
+  motion_json.TrackingSystems.(cfg.tracksys).StartTime                      = ft_getopt(cfg.motion, 'start_time'      );
   
-  motion_json.TrackingSystem.(cfg.tracksys).POSChannelCount                = sum(strcmpi(hdr.chantype, 'POS'))   *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).ORNTChannelCount               = sum(strcmpi(hdr.chantype, 'ORNT'))  *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).VELChannelCount                = sum(strcmpi(hdr.chantype, 'VEL'))   *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).ANGVELChannelCount             = sum(strcmpi(hdr.chantype, 'ANGVEL'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).ACCChannelCount                = sum(strcmpi(hdr.chantype, 'ACC'))   *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).ANGACCChannelCount             = sum(strcmpi(hdr.chantype, 'ANGACC'))*motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).MAGNChannelCount               = sum(strcmpi(hdr.chantype, 'MAGN'))  *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
-  motion_json.TrackingSystem.(cfg.tracksys).JNTANGChannelCount             = sum(strcmpi(hdr.chantype, 'JNTAN')) *motion_json.TrackingSystem.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).POSChannelCount                = sum(strcmpi(hdr.chantype, 'POS'))   *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).ORNTChannelCount               = sum(strcmpi(hdr.chantype, 'ORNT'))  *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).VELChannelCount                = sum(strcmpi(hdr.chantype, 'VEL'))   *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).ANGVELChannelCount             = sum(strcmpi(hdr.chantype, 'ANGVEL'))*motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).ACCChannelCount                = sum(strcmpi(hdr.chantype, 'ACC'))   *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).ANGACCChannelCount             = sum(strcmpi(hdr.chantype, 'ANGACC'))*motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).MAGNChannelCount               = sum(strcmpi(hdr.chantype, 'MAGN'))  *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
+  motion_json.TrackingSystems.(cfg.tracksys).JNTANGChannelCount             = sum(strcmpi(hdr.chantype, 'JNTAN')) *motion_json.TrackingSystems.(cfg.tracksys).TrackedPointsCount;
   
   % merge the information specified by the user with that from the data
   % in case fields appear in both, the first input overrules the second
   motion_json = mergeconfig(motion_settings,  motion_json, false);
   motion_json = mergeconfig(generic_settings, motion_json, false);
 
-  % remove general TrackingSystem info where not applicable
-  if cfg.tracksys == cfg.motion.tracksys_all{1}
-    motion_json.TrackingSystem = rmfield(motion_json.TrackingSystem,cfg.motion.tracksys_all{2}); % removes Trackingsystem info of 2nd system
-  else 
-    motion_json.TrackingSystem  = rmfield(motion_json.TrackingSystem,cfg.motion.tracksys_all{1}); 
-  end
+  % remove general TrackingSystems info where not applicable
+  for tsi = 1:numel(cfg.motion.tracksys_all)
+      ts_num = 1:numel(cfg.motion.tracksys_all);
+      tsi_dif = ts_num(ts_num~=tsi);
+      if cfg.tracksys == cfg.motion.tracksys_all{tsi}
+        motion_json.TrackingSystems = rmfield(motion_json.TrackingSystems,cfg.motion.tracksys_all{tsi_dif}); 
+      end 
+  end 
+      
 
 end
 
@@ -1399,6 +1406,17 @@ if need_channels_tsv
     keep(i) = ischar(channels_tsv.name{i});
   end
   channels_tsv = channels_tsv(keep,:);
+  
+%   % change names for motion
+%   if need_motion_json 
+%       tracksysMap  = containers.Map(cfg.motion.tracksys_all,{'t1' 't2'});
+%       for ni=1:numel(channels_tsv.name)
+%           prefix = tracksysMap(cfg.tracksys); 
+%           type   = channels_tsv.type{ni};
+%           component = channels_tsv.component{ni};
+%           channels_tsv.name{ni} = append(prefix,'_',lower(type),'_',component); 
+%       end
+%   end 
   
   % do a sanity check on the number of channels for the electrophysiology data types
   if need_meg_json
@@ -1532,6 +1550,17 @@ if need_coordsystem_json
   % in case fields appear in both, the first input overrules the second
   coordsystem_json = mergeconfig(coordsystem_settings, coordsystem_json, false); % FIXME the order of precedence is different here
 end % if need_coordsystem_json
+
+
+%% need_scans_json
+if need_scans_json
+  scans_json.filename.Description = 'name of file';
+  scans_json.acq_time.Description = 'date of acquistion shifted by randomly chosen number of days';
+  % merge the information specified by the user with that from the data
+  % in case fields appear in both, the first input overrules the second
+  scans_json = mergeconfig(scans_settings, scans_json, false); 
+end % if need_scans_json
+
 
 %% need_events_tsv
 if need_events_tsv
@@ -1803,30 +1832,11 @@ end % switch method
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % each of these has a corresponding json file
-modality = {'mri', 'meg', 'eeg', 'ieeg', 'nirs', 'physio', 'stim', 'emg', 'exg', 'audio', 'video', 'eyetracker', 'motion', 'coordsystem'};
+modality = {'mri', 'meg', 'eeg', 'ieeg', 'nirs', 'physio', 'stim', 'emg', 'exg', 'audio', 'video', 'eyetracker', 'motion', 'coordsystem', 'scans'};
 for i=1:numel(modality)
   if eval(sprintf('need_%s_json', modality{i}))
     modality_json = eval(sprintf('%s_json', modality{i}));
     modality_json = remove_empty(modality_json);
-    
-%     if strcmp(modality{i}, 'coordsystem')
-%       [p, f] = fileparts(cfg.outputfile);
-%       f = remove_entity(f, 'task');     % remove _task-something
-%       f = remove_entity(f, 'acq');      % remove _acq-something
-%       f = remove_entity(f, 'tracksys');      % remove _tracksys-something
-%       f = remove_entity(f, 'ce');       % remove _ce-something
-%       f = remove_entity(f, 'rec');      % remove _rec-something
-%       f = remove_entity(f, 'dir');      % remove _dir-something
-%       f = remove_entity(f, 'run');      % remove _run-something
-%       f = remove_entity(f, 'mod');      % remove _mod-something
-%       f = remove_entity(f, 'echo');     % remove _echo-something
-%       f = remove_entity(f, 'proc');     % remove _proc-something
-%       f = remove_datatype(f);           % remove _meg, _eeg, etc.
-%       filename = fullfile(p, [f '_coordsystem.json']);
-%     else
-%       % just replace the extension with json
-%       filename = corresponding_json(cfg.outputfile);
-%     end
     
     switch modality{i}
         case 'coordsystem'
@@ -1849,6 +1859,15 @@ for i=1:numel(modality)
             f = remove_entity(f, 'tracksys');      % remove _tracksys-something
             f = remove_datatype(f);           % remove _meg, _eeg, etc.
             filename = fullfile(p, [f '_motion.json']);
+            
+        case 'scans'
+            if ~isempty(cfg.ses)
+                % construct the output filename, with session directory
+                filename = fullfile(cfg.bidsroot, ['sub-' cfg.sub], ['ses-' cfg.ses], ['sub-' cfg.sub '_' 'ses-' cfg.ses '_scans.json']);
+            else
+                % construct the output filename, without session directory
+                filename = fullfile(cfg.bidsroot, ['sub-' cfg.sub], ['sub-' cfg.sub '_scans.json']);
+            end
             
         otherwise
             % just replace the extension with json
@@ -1893,7 +1912,7 @@ for i=1:numel(modality)
   if eval(sprintf('need_%s_tsv', modality{i}))
     modality_tsv = eval(sprintf('%s_tsv', modality{i}));
     modality_tsv = remove_empty(modality_tsv);
-    
+
     if any(strcmp(modality{i}, {'electrodes', 'optodes'}))
       [p, f] = fileparts(cfg.outputfile);
       f = remove_entity(f, 'task');     % remove _task-something
@@ -2030,9 +2049,14 @@ if ~isempty(cfg.bidsroot)
     filename = fullfile(cfg.bidsroot, ['sub-' cfg.sub], ['sub-' cfg.sub '_scans.tsv']);
   end
   
+  % get filename
   this = table();
   [p, f, x] = fileparts(cfg.outputfile);
   this.filename = {fullfile(datatype2dirname(cfg.datatype), [f x])};
+  
+  % get date
+  this.acq_time = cfg.date;
+  
   fn = fieldnames(cfg.scans);
   for i=1:numel(fn)
     % write [] as 'n/a'
@@ -2040,7 +2064,8 @@ if ~isempty(cfg.bidsroot)
     % write boolean as 'True' or 'False'
     this.(fn{i}) = output_compatible(cfg.scans.(fn{i}));
   end
-  
+   
+
   if isfile(filename)
     scans_tsv = ft_read_tsv(filename);
     % the scans.tsv is always merged
@@ -2048,7 +2073,7 @@ if ~isempty(cfg.bidsroot)
   else
     scans_tsv = this;
   end
-  
+ 
   % write the updated file back to disk
   ft_write_tsv(filename, scans_tsv);
   
